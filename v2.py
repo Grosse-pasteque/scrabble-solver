@@ -2,6 +2,7 @@ import re
 import json
 from time import time
 from colorama import init, Fore, Back
+import cProfile
 init()
 
 # https://github.com/dolph/dictionary/blob/master/ospd.txt
@@ -101,8 +102,8 @@ def place(x, y, word, deck, grid, *, orientation, debug):
                 f"There are no {letter!r} remaining")
     grid[y][x] = WALL
     if debug:
-        print(f"[{Back.GREEN}PLACED{Back.RESET}]    placing '{Fore.LIGHTGREEN_EX}{word}{Fore.RESET}'")
-        print(f"[{Back.LIGHTYELLOW_EX}REMAIN{Back.RESET}]    {Fore.MAGENTA}{sum(deck.values())}{Fore.RESET} letters remaining")
+        print(f"[{Fore.GREEN}PLACED{Fore.RESET}]    placing '{Fore.LIGHTGREEN_EX}{word}{Fore.RESET}'")
+        print(f"[{Fore.LIGHTYELLOW_EX}REMAIN{Fore.RESET}]    {Fore.MAGENTA}{sum(deck.values())}{Fore.RESET} letters remaining")
 
     # ensure_grid_buffer(x, y, grid)
 
@@ -193,6 +194,35 @@ class Block:
         ))
 
 
+MAX_LETTERS_COUNT = {
+    'A': 5,
+    'B': 3,
+    'C': 4,
+    'D': 3,
+    'E': 6,
+    'F': 4,
+    'G': 3,
+    'H': 3,
+    'I': 6,
+    'J': 2,
+    'K': 3,
+    'L': 4,
+    'M': 4,
+    'N': 5,
+    'O': 5,
+    'P': 3,
+    'Q': 2,
+    'R': 4,
+    'S': 7,
+    'T': 5,
+    'U': 4,
+    'V': 3,
+    'W': 2,
+    'X': 2,
+    'Y': 2,
+    'Z': 3,
+}
+
 def solve(deck, debug=False):
     global WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED
     deck = { letter: deck.count(letter) for letter in ABC }
@@ -205,105 +235,132 @@ def solve(deck, debug=False):
 
     if debug:
         startup = time()
-        removed = len(WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED)
 
-    WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED = list(filter(
-        lambda m: all(deck[letter] >= n for letter, n in m[1]),
-        WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED.items()
-    ))
+    if any(MAX_LETTERS_COUNT[letter] > n for letter, n in deck.items()):
+        if debug:
+            removed = len(WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED)
+            start = time()
 
-    if debug:
-        total = round(time() - startup, 5)
-        mode = Back if total > 1 else Fore
-        removed -= len(WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED)
-        print(f"[{Back.RED}DELETE{Back.RESET}]    removed {Fore.CYAN}{removed}{Fore.RESET} words in {mode.RED}{total}{mode.RESET}s")
+        WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED = list(filter(
+            lambda m: all(deck[letter] >= n for letter, n in m[1]),
+            WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED.items()
+        ))
+
+        if debug:
+            total = round(time() - start, 5)
+            color_mode = Back if total > 1 else Fore
+            removed -= len(WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED)
+            print(f"[{Fore.RED}DELETE{Fore.RESET}]    removed {Fore.CYAN}{removed}{Fore.RESET} words in {color_mode.RED}{total}{color_mode.RESET}s")
 
     word, _ = WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED[0]
     place(50, 50, word, deck, grid, orientation=HORIZONTAL, debug=debug)
     remaining -= len(word)
 
+    rotation = 1
+    while remaining:
+        mode, other = (VERTICAL, HORIZONTAL)[::rotation]
+        ix, iy = orientations[mode]
+        parsed = set()
+        valid_positions = positions[other]
 
-    # find vertical
-    mode, other = (VERTICAL, HORIZONTAL)
-    patterns = set()
-    ix, iy = orientations[mode]
-    parsed = set()
-    poss = set(positions[other])
-    if debug:
-        print(f"[{Back.RED}POSITIONS{Back.RESET}] found {Fore.CYAN}{len(poss)}{Fore.RESET} valid positions in {['HORIZONTAL', 'VERTICAL'][mode]} mode")
-    for x, y in poss:
-        if (x, y) in parsed:
-            continue
-        pattern = []
-        startx, starty = x, y
-        previous = None
-        while starty >= 0 and startx >= 0:
-            current = grid[starty][startx]
-            if current == WALL:
-                break
-            if current:
-                parsed.add((startx, starty))
-                pattern.append(current)
-                previous = str
-            else:
-                if previous == int:
+        if debug:
+            print(f"[{Fore.BLUE}POSITIONS{Fore.RESET}] found {Fore.CYAN}{len(valid_positions)}{Fore.RESET} valid positions in {['HORIZONTAL', 'VERTICAL'][mode]} mode")
+
+        for i in range(len(valid_positions)):  #############################
+            if i >= len(valid_positions):      # TODO: all this code could #
+                break                          # TODO: be optimized        #
+            x, y = list(valid_positions)[i]    #############################
+            if (x, y) in parsed:
+                continue
+            pattern = []
+            startx, starty = x, y
+            previous = None
+            while starty >= 0 and startx >= 0:
+                current = grid[starty][startx]
+                if current == WALL:
+                    break
+                if current:
+                    parsed.add((startx, starty))
+                    pattern.append(current)
+                    previous = str
+                elif previous == int:
                     pattern[-1] += 1
                 else:
                     pattern.append(1)
                     previous = int
-            startx -= ix
-            starty -= iy
-        startx += ix
-        starty += iy
-        pattern.reverse()
-        endx, endy = x + ix, y + iy
-        previous = None
-        while endy < len(grid) and endx < len(grid[endy]):
-            current = grid[endy][endx]
-            if current == WALL:
-                break
-            if current:
-                parsed.add((endx, endy))
-                pattern.append(current)
-                previous = str
-            else:
-                if previous == int:
+                startx -= ix
+                starty -= iy
+            startx += ix
+            starty += iy
+            pattern.reverse()
+            endx, endy = x + ix, y + iy
+            previous = None
+            while endy < len(grid) and endx < len(grid[endy]):
+                current = grid[endy][endx]
+                if current == WALL:
+                    break
+                if current:
+                    parsed.add((endx, endy))
+                    pattern.append(current)
+                    previous = str
+                elif previous == int:
                     pattern[-1] += 1
                 else:
                     pattern.append(1)
                     previous = int
-            endx += ix
-            endy += iy
+                endx += ix
+                endy += iy
 
-        start = starty if mode == VERTICAL else startx
-        for block in get_subblocks(start, pattern):
-            for i, (word, count) in enumerate(WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED):
-                for letter, n in count:
-                    if deck[letter] + block.placed[letter] < n:
-                        break
-                else:
-                    word_length = len(word)
-                    for offset in range(word_length):
-                        for pos, letter in block.indexes.items():
-                            if offset + pos >= word_length or word[offset + pos] != letter:
-                                break
-                        else:
-                            for letter, n in block.placed.items():
-                                deck[letter] += n
-                            place(x - ix * offset, y - iy * offset, word, deck, grid, orientation=mode, debug=debug)
-                            remaining -= len(word)
-                            if i:
-                                WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED = WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED[i:]
+            start = starty if mode == VERTICAL else startx
+            for block in get_subblocks(start, pattern):
+                for i, (word, count) in enumerate(WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED):
+                    for letter, n in count:
+                        if deck[letter] + block.placed[letter] < n:
                             break
                     else:
-                        continue
-                    break
-            else:
-                # impossible
-                continue
+                        word_length = len(word)
+                        for offset in range(word_length):
+                            for pos, letter in block.indexes.items():
+                                if offset + pos >= word_length or word[offset + pos] != letter:
+                                    break
+                            else:
+                                for letter, n in block.placed.items():
+                                    deck[letter] += n
+                                place(x - ix * offset, y - iy * offset, word, deck, grid, orientation=mode, debug=debug)
+                                remaining = sum(deck.values())
+                                if i:
+                                    # FIXIT: this cannot work
+                                    # TODO: could cache those results (cache pattern: i)
+                                    if debug:
+                                        start = time()
+
+                                    # WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED = WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED[i:]
+
+                                    if debug:
+                                        total = round(time() - start, 5)
+                                        color_mode = Back if total > 1 else Fore
+                                        print(f"[{Fore.RED}DELETE{Fore.RESET}]    removed {Fore.CYAN}{i}{Fore.RESET} words in {color_mode.RED}{total}{color_mode.RESET}s")
+
+                                break
+                        else:
+                            continue
+                        break
+                else:
+                    # impossible
+                    continue
+                break
+
+        if not positions[HORIZONTAL] and not positions[VERTICAL]: # FIXIT: or grid didnt change twice
+            if debug:
+                print(f"[{Fore.RED}POSITIONS{Fore.RESET}] no valid positions remaining")
             break
+        rotation -= rotation * 2
+
     if debug:
-        print(f"[{Back.LIGHTGREEN_EX}FINISH{Back.RESET}]    finished in {Fore.CYAN}{time() - startup:.5f}{Fore.RESET}s")
+        total = round(time() - startup, 5)
+        color_mode = Back if total > 1 else Fore
+        print(f"[{Fore.LIGHTGREEN_EX}FINISH{Fore.RESET}]    finished in {color_mode.RED}{total}{color_mode.RESET}s")
+
     minx = miny = maxx = maxy = None
     for y, line in enumerate(grid):
         for x, letter in enumerate(line):
@@ -333,7 +390,6 @@ def main():
     parser.add_argument("-d", "--debug", action="store_true", help="Starts the script in debug mode.")
     args = parser.parse_args()
 
-    import cProfile
     with cProfile.Profile() as pr:
         grid = solve(args.letters, debug=args.debug)
         pr.dump_stats('stats.prof')
