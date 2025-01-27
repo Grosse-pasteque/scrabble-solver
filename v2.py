@@ -42,26 +42,6 @@ def ensure_grid_buffer(x, y, grid): # TODO: optimize -> wastes 0.026
     return x, y
 
 
-class Slot:
-    def __init__(self):
-        self.value = None
-        self.is_blocked = False
-        self.is_valid = False # TODO: instances
-
-    def block(self):
-        self.is_blocked = True
-        self.is_valid = False
-
-    def update(self, letter: str):
-        if not self.is_blocked:
-            if self.is_valid:
-                self.is_blocked = True
-                return False
-            self.is_valid = True
-            return True
-        return False
-
-
 # valid for a vertical/horizontal word
 positions = (set(), set())
 
@@ -153,9 +133,11 @@ class Block:
         self.offset = offset
         self.pattern = pattern
         self.indexes = {}
-        self.placed = { letter: 0 for letter in ABC }
+        self.placed_count = { letter: 0 for letter in ABC }
+        self.placed = set()
         self.is_fixed = True
         self.min_length = 0
+        self.start = 0
         self.length = 0
 
     def prepare(self):
@@ -165,11 +147,14 @@ class Block:
             if letter.__class__ == int:
                 offset += letter
             else:
+                offset += 1
                 if start is None:
                     start = offset
                 self.indexes[offset - start] = letter
-                self.placed[letter] += 1
-                offset += 1
+                self.placed_count[letter] += 1
+                self.placed.add(letter)
+        self.start = start
+        self.length = offset
 
     def __repr__(self):
         return f"<{self.offset} {self.pattern}>"
@@ -266,10 +251,10 @@ def solve(deck, debug=False):
         if debug:
             print(f"[{Fore.BLUE}POSITIONS{Fore.RESET}] found {Fore.CYAN}{len(valid_positions)}{Fore.RESET} valid positions in {['HORIZONTAL', 'VERTICAL'][mode]} mode")
 
-        for i in range(len(valid_positions)):  #############################
-            if i >= len(valid_positions):      # TODO: all this code could #
-                break                          # TODO: be optimized        #
-            x, y = list(valid_positions)[i]    #############################
+        for i in range(len(valid_positions)): #############################
+            if i >= len(valid_positions):     # TODO: all this code could #
+                break                         # TODO: be optimized        #
+            x, y = list(valid_positions)[i]   #############################
             if (x, y) in parsed:
                 continue
             pattern = []
@@ -278,6 +263,10 @@ def solve(deck, debug=False):
             while starty >= 0 and startx >= 0:
                 current = grid[starty][startx]
                 if current == WALL:
+                    break
+                if (startx - ix, starty - iy) in positions[other]:
+                    try: pattern.pop()
+                    except: pass
                     break
                 if current:
                     parsed.add((startx, starty))
@@ -299,6 +288,9 @@ def solve(deck, debug=False):
                 current = grid[endy][endx]
                 if current == WALL:
                     break
+                if (endx + ix, endy + iy) in positions[mode]: # ??
+                    pattern.pop()
+                    break
                 if current:
                     parsed.add((endx, endy))
                     pattern.append(current)
@@ -311,20 +303,27 @@ def solve(deck, debug=False):
                 endx += ix
                 endy += iy
 
+            if not pattern:
+                positions.remove((x, y))
+                continue
+
             start = starty if mode == VERTICAL else startx
             for block in get_subblocks(start, pattern):
+                block_start = time()
                 for i, (word, count) in enumerate(WORDS_LETTERS_COUNT_BY_POINTS_OPTIMIZED):
+                    if len(word) > block.length:
+                        continue
                     for letter, n in count:
-                        if deck[letter] + block.placed[letter] < n:
+                        if deck[letter] + block.placed_count[letter] < n:
                             break
                     else:
                         word_length = len(word)
                         for offset in range(word_length):
                             for pos, letter in block.indexes.items():
-                                if offset + pos >= word_length or word[offset + pos] != letter:
+                                if offset + pos >= word_length or word[offset + pos] != letter or word_length - offset + block.start > block.offset + block.length:
                                     break
                             else:
-                                for letter, n in block.placed.items():
+                                for letter, n in block.placed_count.items():
                                     deck[letter] += n
                                 place(x - ix * offset, y - iy * offset, word, deck, grid, orientation=mode, debug=debug)
                                 remaining = sum(deck.values())
@@ -346,13 +345,23 @@ def solve(deck, debug=False):
                             continue
                         break
                 else:
-                    # impossible
+                    # TODO: cache impossible
+                    if debug:
+                        total = round(time() - block_start, 5)
+                        color_mode = Back if total > 1 else Fore
+                        print(f"[{Fore.CYAN}PATTERN{Fore.RESET}]   impossible pattern {Fore.GREEN}{block}{Fore.RESET} checked in {color_mode.RED}{total}{color_mode.RESET}s\n            { { letter: n for letter, n in deck.items() if n } }\n            { { letter: n for letter, n in block.placed_count.items() if n } }") # TODO: compare placed & word & deck
                     continue
+                if debug:
+                    total = round(time() - block_start, 5)
+                    color_mode = Back if total > 1 else Fore
+                    print(f"[{Fore.CYAN}PATTERN{Fore.RESET}]   pattern {Fore.GREEN}{block}{Fore.RESET} checked in {color_mode.RED}{total}{color_mode.RESET}s")
+                break
+            if not remaining:
                 break
 
         if not positions[HORIZONTAL] and not positions[VERTICAL]: # FIXIT: or grid didnt change twice
             if debug:
-                print(f"[{Fore.RED}POSITIONS{Fore.RESET}] no valid positions remaining")
+                print(f"[{Fore.CYAN}POSITIONS{Fore.RESET}] no valid positions remaining")
             break
         rotation -= rotation * 2
 
