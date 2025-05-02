@@ -9,7 +9,7 @@ const fs = require('fs');
 
 const randint = (a, b) => a + Math.floor((b - a) * Math.random());
 
-const dicoLettres = {
+const lettersFrequencies = {
     'A': 14,
     'B': 3,
     'C': 4,
@@ -37,17 +37,14 @@ const dicoLettres = {
     'Y': 1,
     'Z': 2,
 };
-let longueur_max = 0;
-let longueur_min = Infinity;
 
-const tableauLettres = []
-for (const [lettre, count] of Object.entries(dicoLettres)) {
-    for (let i = 0; i < count; i++) {
-        tableauLettres.push(lettre)
-    }
-}
+const lettersTable = [];
+for (const [letter, count] of Object.entries(lettersFrequencies))
+    for (let i = 0; i < count; i++)
+        lettersTable.push(letter);
 
-function copyGrille(arr) {
+
+function gridCopy(arr) {
     let newArr = new Array(arr.length);
     for (let i = 0; i < arr.length; i++) {
         let row = arr[i];
@@ -66,412 +63,245 @@ function copy(arr) {
 }
 
 function bananaTirage(nb) {
-    let tirage = ""
-    let tabCopie = copy(tableauLettres);
+    let hand = ""
+    let tabCopie = copy(lettersTable);
     for (var i = 0; i < nb; i++)
-        tirage += tabCopie.splice(randint(0, tabCopie.length - 1), 1)[0];
-    return tirage;
+        hand += tabCopie.splice(randint(0, tabCopie.length - 1), 1)[0];
+    return hand;
 }
 
-function dictionnaire_ordonne() {
-    const dictionnaire = [];
+function getSortedDict() {
+    const dictionary = [];
     for (let i = 0; i < 26; i++)
-        dictionnaire.push([])
+        dictionary.push(new Set);
+        // dictionary.push([]);
     const content = fs.readFileSync('ODS9.txt', 'utf8');
-    for (const mot of content.split('\n'))
-        dictionnaire[mot.length].push(mot);
-    return dictionnaire;
+    for (const word of content.split('\n'))
+        dictionary[word.length].add(word);
+        // dictionary[word.length].push(word);
+    return dictionary;
 }
 
-const dictionnaire = dictionnaire_ordonne();
+const dictionary = getSortedDict();
+for (let i = 0; i < 26; i++)
+    console.log(dictionary[i].size);
 
-function lettres_multiples_ok(mot, tirage) {
-    for (let lettre of mot) {
-        const i = tirage.indexOf(lettre);
+function isMultipleLettersOk(word, hand) {
+    for (let letter of word) {
+        const i = hand.indexOf(letter);
         if (i === -1)
             return false;
-        tirage.splice(i, 1); // TODO: use object with count instead of array
+        hand.splice(i, 1); // TODO: use object with count instead of array
     }
     return true;
 }
 
 function isSubset(setA, setB) { // TODO: optimize
-    for (let elem of setA) {
+    /* TODO: cache words letters count
+    
+         dictionary = Map(word: Array(count, ...))
+
+         [0, 0, 0, 0, ...]
+          A  B  C  D  ...
+    */
+    for (let elem of setA)
         if (!setB.has(elem))
             return false;
-    }
     return true;
 }
 
-function* get_ensemble_solutions(tirage) {
-    let longueur_mot = tirage.length;
-    const set_tirage = new Set(tirage);
-    while (longueur_mot > 0) {
-        if (longueur_mot < dictionnaire.length) {
-            for (let mot of dictionnaire[longueur_mot]) {
-                if (isSubset(mot, set_tirage) && lettres_multiples_ok(mot, copy(tirage)))
-                    yield mot
-            }
+function* getSolutions(hand) {
+    let size = hand.length;
+    const handSet = new Set(hand);
+    while (size > 0) {
+        if (size < dictionary.length) {
+            for (let word of dictionary[size]) // const [word, count]
+                if (isSubset(word, handSet) && isMultipleLettersOk(word, copy(hand)))
+                    // TODO: make 1 single check loop
+                    yield word;
+                // TODO: else delete from dictionnary
         }
-        longueur_mot--;
+        size--;
     }
 }
 
-const get_plus_long_mot = tirage => get_ensemble_solutions(tirage).next().value;
+const getLongestWord = hand => getSolutions(hand).next().value;
 
-function* lettres_utilisables(grille,tirage) {
-    const w = grille[0].length;
-    const h = grille.length;
-    for (var i = 0; i < h; i++) {
-        for (var j = 0; j < w; j++) {
-            const v = grille[i][j];
-            if (v != '.') {
-                if (i == 0) {
-                    if (j == 0) {
-                        if (grille[0][1] == '.' || grille[1][0] == '.')
-                            yield v;
-                    } else if (j == w-1) {
-                        if (grille[0][w-2] == '.' || grille[1][w-1] == '.')
-                            yield v;
-                    } else if (j > 0 && j < w-1) {
-                        if (grille[0][j-1] == '.' && grille[0][j+1] == '.' || grille[1][j] == '.')
-                            yield v;
-                    }
-                } else if (i == h-1) {
-                    if (j == 0) {
-                        if (grille[h-1][1] == '.' || grille[h-2][0] == '.')
-                            yield v;
-                    } else if (j == w-1) {
-                        if (grille[h-1][w-2] == '.' || grille[h-2][w-1] == '.')
-                            yield v;
-                    } else if (j > 0 && j < w-1) {
-                        if (grille[h-1][j-1] == '.' && grille[h-1][j+1] == '.' || grille[h-2][j] == '.')
-                            yield v;
-                    }
-                } else if (i > 0 && i < h-1) {
-                    if (j == 0) {
-                        if (grille[i-1][0] == '.' && grille[i+1][0] == '.' || grille[i][1] == '.')
-                            yield v;
-                    } else if (j == w-1) {
-                        if (grille[i-1][w-1] == '.' && grille[i+1][w-1] == '.' || grille[i][w-2] == '.')
-                            yield v;
-                    } else if (j > 0 && j < w-1) {
-                        if (grille[i][j-1] == '.' && grille[i][j+1] == '.' || grille[i-1][j] == '.' && grille[i+1][j] == '.')
-                            yield v;
-                    }
-                }
-            }
-        }
+function* usableLetters(grid,hand) {
+    const w = grid[0].length;
+    const h = grid.length;
+    for (var y = 0; y < h; y++)
+    for (var x = 0; x < w; x++) {
+        const v = grid[y][x];
+        if (v && (!grid[y][x-1] && !grid[y][x+1] || !grid[y-1]?.[x] && !grid[y+1]?.[x]))
+            yield v;
     }
 }
 
-function* get_mot_connexe(tirage) {
-    for (let mot of get_ensemble_solutions(tirage))
-        if (mot.includes(tirage[0]))
-            yield mot;
+function* getConnectedWord(hand) {
+    for (let word of getSolutions(hand))
+        if (word.includes(hand[0])) {
+            yield word;
+        }
 }
 
-function ajout_mot_grille(mot, grille, tirage) {
-    const taille_mot = mot.length;
-    if (taille_mot == 0)
-        return grille;
-    let w = grille[0].length,
-        h = grille.length;
-    const new_grille = copyGrille(grille),
-          lettre_grille = tirage[0],
-          ligne_lettre = [],
-          colonne_lettre = [],
-          sens = [];
-
-    const slots = []; // colone, ligne, sens
-    for (let y = 0; y < h - 1; y++) {
-        for (let x = 0; x < w - 1; x++) {
-            if (grille[y][x] == lettre_grille) {
-                if (y == 0) {
-                    if (x == 0) {
-                        if (grille[0][1] == '.')                                 slots.push([x, y, 0]);
-                        else if (grille[1][0] == '.')                            slots.push([x, y, 1]);
-                    } else if (x == h-1) {
-                        if (grille[0][h-2] == '.')                               slots.push([x, y, 0]);
-                        else if (grille[1][h-1] == '.')                          slots.push([x, y, 1]);
-                    } else {
-                        if (grille[0][x-1] == '.' && grille[0][x+1] == '.')      slots.push([x, y, 0]);
-                        else if (grille[1][x] == '.')                            slots.push([x, y, 1]);
-                    }
-                } else if (y == h-1) {
-                    if (x == 0) {
-                        if (grille[h-1][1] == '.')                               slots.push([x, y, 0]);
-                        else if (grille[h-2][0] == '.')                          slots.push([x, y, 1]);
-                    } else if (x == h-1) {
-                        if (grille[h-1][h-2] == '.')                             slots.push([x, y, 0]);
-                        else if (grille[h-2][h-1] == '.')                        slots.push([x, y, 1]);
-                    } else {
-                        if (grille[h-1][x-1] == '.' && grille[h-1][x+1] == '.')  slots.push([x, y, 0]);
-                        else if (grille[h-2][x] == '.')                          slots.push([x, y, 1]);
-                    }
-                } else {
-                    if (x == 0) {
-                        if (grille[y-1][0] == '.' && grille[y+1][0] == '.')      slots.push([x, y, 1]);
-                        else if (grille[y][1] == '.')                            slots.push([x, y, 0]);
-                    } else if (x == h-1) {
-                        if (grille[y-1][h-1] == '.' && grille[y+1][h-1] == '.')  slots.push([x, y, 1]);
-                        else if (grille[y][h-2] == '.')                          slots.push([x, y, 0]);
-                    } else {
-                        if (grille[y][x-1] == '.' && grille[y][x+1] == '.')      slots.push([x, y, 0]);
-                        else if (grille[y-1][x] == '.' && grille[y+1][x] == '.') slots.push([x, y, 1]);
-                    }
-                }
-            }
+function* getSlots(w, h, grid, letterGrille) {
+    // yields [column, line, direction]
+    for (let y = 0; y < h - 1; y++)
+    for (let x = 0; x < w - 1; x++)
+        if (grid[y][x] == letterGrille) {
+            if (!grid[y][x-1] && !grid[y][x+1])
+                yield [x, y, 0];
+            else if (!grid[y-1]?.[x] && !grid[y+1]?.[x])
+                yield [x, y, 1];
         }
-    }
+}
 
-    let emplacement_lettre_initiale = -1;
-    for (let i = 0; i < taille_mot; i++)
-        if (mot[i] == lettre_grille)
-            emplacement_lettre_initiale = i;
+function placeWord(word, grid, hand) {
+    const wordLength = word.length;
+    if (wordLength == 0)
+        return;
+    let w = grid[0].length,
+        h = grid.length;
+    const newGrid = gridCopy(grid),
+          letterGrille = hand[0];
 
-    if (emplacement_lettre_initiale == -1)
-        return grille;
+    let initLetterIndex = -1;
+    for (let i = 0; i < wordLength; i++)
+        if (word[i] == letterGrille)
+            initLetterIndex = i;
 
-    for (let [x, y, sens] of slots) {
-        let emp_let_temp = [];
-        for (let i = 0; i < taille_mot; i++) {
-            if (sens)
-                emp_let_temp.push([y + i - emplacement_lettre_initiale, x]);
-            else
-                emp_let_temp.push([y, x + i - emplacement_lettre_initiale]);
+    if (initLetterIndex == -1)
+        return;
+
+    let tempPosition = new Array(wordLength);
+    for (let [columnInit, lineInit, direction] of getSlots(w, h, grid, letterGrille)) {
+        for (let i = 0; i < wordLength; i++) {
+            tempPosition[i] = [lineInit, columnInit];
+            tempPosition[i][1 - direction] += i - initLetterIndex;
         }
 
         let k = 0;
-        for (let [ligne, colone] of emp_let_temp) {
-            if (k == emplacement_lettre_initiale) {
+        for (let [line, column] of tempPosition) {
+            if (k == initLetterIndex) {
                 k++;
                 continue;
             }
-            if (ligne == 0) {
-                if (colone == 0) {
-                    if (ligne+1 == y) {
-                        if (grille[ligne][colone+1] != '.')
-                            break;
-                    } else if (colone+1 == x) {
-                        if (grille[ligne+1][colone] != '.')
-                            break;
-                    } else {
-                        if (grille[ligne+1][colone] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    }
-                } else if (colone == w-1) {
-                    if (ligne+1 == y) {
-                        if (grille[ligne][colone-1] != '.')
-                            break;
-                    } else if (colone-1 == x) {
-                        if (grille[ligne+1][colone] != '.')
-                            break;
-                    } else {
-                        if (grille[ligne][colone-1] != '.' || grille[ligne+1][colone] != '.')
-                            break;
-                    }
-                } else if (0 < colone && colone < w-1) {
-                    if (colone-1 == x) {
-                        if (grille[ligne+1][colone] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    } else if (colone+1 == x) {
-                        if (grille[ligne+1][colone] != '.' || grille[ligne][colone-1] != '.')
-                            break;
-                    } else if (ligne+1 == y) {
-                        if (grille[ligne][colone-1] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    } else {
-                        if (grille[ligne+1][colone] != '.' || grille[ligne][colone-1] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    }
-                }
-            } else if (ligne == h-1) {
-                if (colone == 0) {
-                    if (ligne-1 == y) {
-                        if (grille[ligne][colone+1] != '.')
-                            break;
-                    } else if (colone+1 == x) {
-                        if (grille[ligne-1][colone] != '.')
-                            break;
-                    } else {
-                        if (grille[ligne][colone+1] != '.' || grille[ligne-1][colone] != '.')
-                            break;
-                    }
-                } else if (colone == w-1) {
-                    if (colone-1 == y) { // TODO: misstake?
-                        if (grille[ligne-1][colone] != '.')
-                            break;
-                    } else if (ligne-1 == y) {
-                        if (grille[ligne][colone-1] != '.')
-                            break;
-                    } else {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne][colone-1] != '.')
-                            break;
-                    }
-                } else if (0 < colone && colone < w-1) {
-                    if (colone-1 == x) {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    } else if (colone+1 == x) {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne][colone-1] != '.')
-                            break;
-                    } else if (ligne-1 == y) {
-                        if (grille[ligne][colone-1] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    } else {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne][colone-1] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    }
-                }
-            } else if (0 < ligne && ligne < h-1) {
-                if (colone == 0) {
-                    if (ligne-1 == y) {
-                        if (grille[ligne+1][colone] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    } else if (ligne+1 == y) {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    } else if (colone+1 == y) {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne+1][colone] != '.')
-                            break;
-                    } else {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne+1][colone] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    }
-                } else if (colone == w-1) {
-                    if (ligne-1 == y) {
-                        if (grille[ligne+1][colone] != '.' || grille[ligne][colone-1] != '.')
-                            break;
-                    } else if (ligne+1 == y) {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne][colone-1] != '.')
-                            break;
-                    } else if (colone-1 == y) {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne+1][colone] != '.')
-                            break;
-                    } else {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne+1][colone] != '.' || grille[ligne][colone-1] != '.')
-                            break;
-                    }
-                } else if (0 < colone && colone < w-1) {
-                    if (colone+1 == x) {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne+1][colone] != '.' || grille[ligne][colone-1] != '.')
-                            break;
-                    } else if (colone-1 == x) {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne+1][colone] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    } else if (ligne-1 == y) {
-                        if (grille[ligne+1][colone] != '.' || grille[ligne][colone-1] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    } else if (ligne+1 == y) {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne][colone-1] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    } else {
-                        if (grille[ligne-1][colone] != '.' || grille[ligne+1][colone] != '.' || grille[ligne][colone-1] != '.' || grille[ligne][colone+1] != '.')
-                            break;
-                    }
-                }
+            const up = grid[line - 1]?.[column],
+                  down = grid[line + 1]?.[column],
+                  left = grid[line]?.[column - 1],
+                  right = grid[line]?.[column + 1];
+
+            if (column + 1 == columnInit) {
+                if (up || down || left) break;
+            } else if (column - 1 == columnInit) {
+                if (up || down || right) break;
+            } else if (line - 1 == lineInit) {
+                if (down || left || right) break;
+            } else if (line + 1 == lineInit) {
+                if (up || left || right) break;
+            } else {
+                if (up || down || left || right) break;
             }
             k++;
         }
 
-        if (k == emp_let_temp.length) {
-            for (let i = 0; i < taille_mot; i++) {
-                if (emp_let_temp[i][0] < 0) {
-                    new_grille.unshift(copy('.'.repeat(w))); // new_grille.splice(i, 0, copy('.'.repeat(w)));
+        if (k == tempPosition.length) {
+            for (let i = 0; i < wordLength; i++) {
+                if (tempPosition[i][0] < 0) {
+                    newGrid.unshift(new Array(w));
                     h++;
                 } else if (
-                    emp_let_temp[i][0] - emp_let_temp[0][0] >= h && emp_let_temp[0][0] < 0
-                    || emp_let_temp[i][0] >= h
+                    tempPosition[i][0] - tempPosition[0][0] >= h && tempPosition[0][0] < 0
+                    || tempPosition[i][0] >= h
                 ) {
-                    new_grille.push(copy('.'.repeat(w)));
+                    newGrid.push(new Array(w));
                     h++;
-                } else if (emp_let_temp[i][1] < 0) {
-                    for (let line of new_grille)
-                        line.unshift('.'); // line.splice(i, 0, '.');
+                } else if (tempPosition[i][1] < 0) {
+                    for (let line of newGrid)
+                        line.unshift(undefined);
                     w++;
                 } else if (
-                    emp_let_temp[i][1] - emp_let_temp[0][1] >= w && emp_let_temp[0][1] < 0
-                    || emp_let_temp[i][1] >= w
+                    tempPosition[i][1] - tempPosition[0][1] >= w && tempPosition[0][1] < 0
+                    || tempPosition[i][1] >= w
                 ) {
-                    for (let line of new_grille)
-                        line.push('.');
+                    for (let line of newGrid)
+                        line.push(undefined);
                     w++;
                 }
             }
-            for (let i = 0; i < taille_mot; i++) {
-                if (sens) {
-                    if (emp_let_temp[0][0] < 0)
-                        new_grille[emp_let_temp[i][0] + emplacement_lettre_initiale - emp_let_temp[emplacement_lettre_initiale][0]][emp_let_temp[i][1]] = mot[i];
-                    else
-                        new_grille[emp_let_temp[i][0]][emp_let_temp[i][1]] = mot[i];
-                } else {
-                    if (emp_let_temp[0][1] < 0)
-                        new_grille[emp_let_temp[i][0]][emp_let_temp[i][1] + emplacement_lettre_initiale - emp_let_temp[emplacement_lettre_initiale][1]] = mot[i];
-                    else
-                        new_grille[emp_let_temp[i][0]][emp_let_temp[i][1]] = mot[i];
-                }
+            const inx = (1 - direction) * (initLetterIndex - tempPosition[initLetterIndex][1]),
+                  iny = direction * (initLetterIndex - tempPosition[initLetterIndex][0]);
+            for (let i = 0; i < wordLength; i++) {
+                if (tempPosition[0][1-direction] < 0)
+                    newGrid[tempPosition[i][0] + iny][tempPosition[i][1] + inx] = word[i];
+                else
+                    newGrid[tempPosition[i][0]][tempPosition[i][1]] = word[i];
             }
-            return new_grille;
+            return newGrid;
         }
     }
-    return grille;
 }
 
-function banana_rec(grille, tirage, depth=0) {
-    if (tirage.length <= 1)
-        return grille;
-    for (let mot of get_mot_connexe(tirage)) {
-        let new_grille = copyGrille(grille);
-        new_grille = ajout_mot_grille(mot, new_grille, tirage);
-        if (JSON.stringify(new_grille) != JSON.stringify(grille)) {
-            let new_tirage = copy(tirage);
-            for (let lettre of mot)
-                new_tirage.splice(new_tirage.indexOf(lettre), 1);
-            for (let lettre of lettres_utilisables(new_grille, new_tirage)) {
-                let grille_banana_connexe = banana_rec(new_grille, [lettre].concat(new_tirage), depth+1);
-                if (grille_banana_connexe)
-                    return grille_banana_connexe;
+function bananaRec(grid, hand, depth=0) {
+    if (hand.length <= 1)
+        return grid;
+    for (let word of getConnectedWord(hand)) {
+        const newGrid = placeWord(word, gridCopy(grid), hand);
+        // NOTE: there can be many placements so need something to fix it
+        if (newGrid) {
+            const newHand = copy(hand);
+            for (let letter of word)
+                newHand.splice(newHand.indexOf(letter), 1);
+            for (let letter of usableLetters(newGrid, newHand)) {
+                const recGrid = bananaRec(newGrid, [letter].concat(newHand), depth+1);
+                if (recGrid)
+                    return recGrid;
             }
         }
     }
 }
 
-function bananaSolver(listeTirage) {
-    let tirage = copy(listeTirage);
-    let grille = [[],[]];
-    for (let mot of get_ensemble_solutions(tirage)) {
-        // console.log("-", mot);
-        let new_grille = copyGrille(grille);
-        let new_tirage = copy(tirage);
-        for (let lettre of mot) {
-            new_tirage.splice(new_tirage.indexOf(lettre), 1);
-            new_grille[0].push(lettre);
-            new_grille[1].push('.');
+function bananaSolver(hand) {
+    for (let word of getSolutions(hand)) {
+        const newGrid = [[], []];
+        const newHand = copy(hand);
+        for (let letter of word) {
+            newHand.splice(newHand.indexOf(letter), 1);
+            newGrid[0].push(letter);
+            newGrid[1].push(undefined);
         }
-        for (let lettre of lettres_utilisables(new_grille, new_tirage)) {
-            let grille_banana_connexe = banana_rec(new_grille, [lettre].concat(new_tirage));
-            if (grille_banana_connexe)
-                return grille_banana_connexe;
+        for (let letter of usableLetters(newGrid, newHand)) {
+            const recGrid = bananaRec(newGrid, [letter].concat(newHand));
+            if (recGrid)
+                return recGrid;
         }
     }
 }
 
-function afficherGrille(grille) {
-    for (let ligne of grille)
-        console.log(ligne.join('').replaceAll('.', ' '));
+function showGrid(grid) {
+    for (let line of grid)
+        console.log(line.map(x => x || ' ').join(''));
 }
 
 
-const tirage = copy("AAAAAAAAAAAAAABBBCCCCDDDDEEEEEEEEEEEEEEEEEEEEEFFFGGHHIIIIIIIIIIIIJKLLLLLLLMMMMNNNNNNNNNOOOOOOOOOPPPQRRRRRRRRRSSSSSSSSSTTTTTTTTTUUUUUUUUUVVVWXYZZ");
-// const tirage = copy("GOOU");
-
+let tt = 0;
+const hand = copy("AAAAAAAAAAAAAABBBCCCCDDDDEEEEEEEEEEEEEEEEEEEEEFFFGGHHIIIIIIIIIIIIJKLLLLLLLMMMMNNNNNNNNNOOOOOOOOOPPPQRRRRRRRRRSSSSSSSSSTTTTTTTTTUUUUUUUUUVVVWXYZZ");
+// const hand = copy("GOOU");
 const start = performance.now();
-const grille = bananaSolver(tirage);
+const grid = bananaSolver(hand);
 const end = performance.now();
 
-if (grille)
-    afficherGrille(grille);
+if (grid)
+    showGrid(grid);
 else
-    console.log("Le tirage n'a pas de solution optimale");
-console.log(end - start, "ms"); // 110 ms
+    console.log("Le main n'a pas de solution optimale");
+
+console.log(end - start, "ms"); // 105 ms
+console.log(tt, "ms wasted potentially");
+// 0.6% for Hands
+// 1.6% for Placing
+// 2.5% for JSON.stringify
+// 0.9% for Grid Copy
+// 52.5% for Is Subset
+// 0.2% for Multiple Letters Ok
