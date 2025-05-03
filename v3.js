@@ -7,42 +7,8 @@
 **/
 const fs = require('fs');
 
-const randint = (a, b) => a + Math.floor((b - a) * Math.random());
-
-const lettersFrequencies = {
-    'A': 14,
-    'B': 3,
-    'C': 4,
-    'D': 4,
-    'E': 21,
-    'F': 3,
-    'G': 2,
-    'H': 2,
-    'I': 12,
-    'J': 1,
-    'K': 1,
-    'L': 7,
-    'M': 4,
-    'N': 9,
-    'O': 9,
-    'P': 3,
-    'Q': 1,
-    'R': 9,
-    'S': 9,
-    'T': 9,
-    'U': 9,
-    'V': 3,
-    'W': 1,
-    'X': 1,
-    'Y': 1,
-    'Z': 2,
-};
-
-const lettersTable = [];
-for (const [letter, count] of Object.entries(lettersFrequencies))
-    for (let i = 0; i < count; i++)
-        lettersTable.push(letter);
-
+const dictionary = getSortedDict();
+const squaresHand = ['OARR', 'CXEE', 'GCOO', 'DXEE', 'JXEE', 'LXEE', 'MXEE', 'GMOO', 'GROO', 'GUOO'];
 
 function gridCopy(arr) {
     let newArr = new Array(arr.length);
@@ -55,6 +21,7 @@ function gridCopy(arr) {
     }
     return newArr;
 }
+
 function copy(arr) {
     let newArr = new Array(arr.length);
     for (let i = 0; i < arr.length; i++)
@@ -62,48 +29,27 @@ function copy(arr) {
     return newArr;
 }
 
-function bananaTirage(nb) {
-    let hand = ""
-    let tabCopie = copy(lettersTable);
-    for (var i = 0; i < nb; i++)
-        hand += tabCopie.splice(randint(0, tabCopie.length - 1), 1)[0];
-    return hand;
-}
-
 function getSortedDict() {
     const dictionary = [];
     for (let i = 0; i < 26; i++)
-        dictionary.push(new Set);
-        // dictionary.push([]);
+        dictionary.push([]);
     const content = fs.readFileSync('ODS9.txt', 'utf8');
     for (const word of content.split('\n'))
-        dictionary[word.length].add(word);
-        // dictionary[word.length].push(word);
+        dictionary[word.length].push(word);
     return dictionary;
 }
-
-const dictionary = getSortedDict();
-for (let i = 0; i < 26; i++)
-    console.log(dictionary[i].size);
 
 function isMultipleLettersOk(word, hand) {
     for (let letter of word) {
         const i = hand.indexOf(letter);
-        if (i === -1)
+        if (i == -1)
             return false;
-        hand.splice(i, 1); // TODO: use object with count instead of array
+        hand.splice(i, 1);
     }
     return true;
 }
 
-function isSubset(setA, setB) { // TODO: optimize
-    /* TODO: cache words letters count
-    
-         dictionary = Map(word: Array(count, ...))
-
-         [0, 0, 0, 0, ...]
-          A  B  C  D  ...
-    */
+function isSubset(setA, setB) {
     for (let elem of setA)
         if (!setB.has(elem))
             return false;
@@ -114,18 +60,13 @@ function* getSolutions(hand) {
     let size = hand.length;
     const handSet = new Set(hand);
     while (size > 0) {
-        if (size < dictionary.length) {
-            for (let word of dictionary[size]) // const [word, count]
+        if (size < dictionary.length)
+            for (let word of dictionary[size])
                 if (isSubset(word, handSet) && isMultipleLettersOk(word, copy(hand)))
-                    // TODO: make 1 single check loop
                     yield word;
-                // TODO: else delete from dictionnary
-        }
         size--;
     }
 }
-
-const getLongestWord = hand => getSolutions(hand).next().value;
 
 function* usableLetters(grid,hand) {
     const w = grid[0].length;
@@ -140,9 +81,8 @@ function* usableLetters(grid,hand) {
 
 function* getConnectedWord(hand) {
     for (let word of getSolutions(hand))
-        if (word.includes(hand[0])) {
+        if (word.includes(hand[0]))
             yield word;
-        }
 }
 
 function* getSlots(w, h, grid, letterGrille) {
@@ -262,15 +202,34 @@ function bananaRec(grid, hand, depth=0) {
     }
 }
 
-function bananaSolver(hand) {
-    for (let word of getSolutions(hand)) {
-        const newGrid = [[], []];
-        const newHand = copy(hand);
-        for (let letter of word) {
-            newHand.splice(newHand.indexOf(letter), 1);
-            newGrid[0].push(letter);
-            newGrid[1].push(undefined);
+function bananaSolver(handString) {
+    if (handString.length == 4)
+        main: for (const squareHand of squaresHand) {
+            const count = new Uint8Array(26);
+            for (let i = 0; i < 4; i++) {
+                count[squareHand.charCodeAt(i) - 65]++;
+                count[handString.charCodeAt(i) - 65]--;
+            }
+            for (let i = 0; i < 26; i++)
+                if (count[i])
+                    continue main;
+            return [
+                [squareHand[0], squareHand[2]],
+                [squareHand[2], squareHand[1]]
+            ];
         }
+
+    for (let word of getSolutions(copy(handString))) {
+        const s = word.length + 2;
+        const newGrid = [
+            new Array(s),
+            new Array(s),
+            new Array(s)
+        ];
+        const newHand = copy(handString);
+        let i = 1;
+        for (let letter of word)
+            newHand.splice(newHand.indexOf(newGrid[1][i++] = letter), 1);
         for (let letter of usableLetters(newGrid, newHand)) {
             const recGrid = bananaRec(newGrid, [letter].concat(newHand));
             if (recGrid)
@@ -285,23 +244,14 @@ function showGrid(grid) {
 }
 
 
-let tt = 0;
-const hand = copy("AAAAAAAAAAAAAABBBCCCCDDDDEEEEEEEEEEEEEEEEEEEEEFFFGGHHIIIIIIIIIIIIJKLLLLLLLMMMMNNNNNNNNNOOOOOOOOOPPPQRRRRRRRRRSSSSSSSSSTTTTTTTTTUUUUUUUUUVVVWXYZZ");
-// const hand = copy("GOOU");
+const handString = "AAAAAAAAAAAAAABBBCCCCDDDDEEEEEEEEEEEEEEEEEEEEEFFFGGHHIIIIIIIIIIIIJKLLLLLLLMMMMNNNNNNNNNOOOOOOOOOPPPQRRRRRRRRRSSSSSSSSSTTTTTTTTTUUUUUUUUUVVVWXYZZ";
 const start = performance.now();
-const grid = bananaSolver(hand);
+const grid = bananaSolver(handString);
 const end = performance.now();
 
 if (grid)
     showGrid(grid);
 else
-    console.log("Le main n'a pas de solution optimale");
+    console.log("No grid found...");
 
-console.log(end - start, "ms"); // 105 ms
-console.log(tt, "ms wasted potentially");
-// 0.6% for Hands
-// 1.6% for Placing
-// 2.5% for JSON.stringify
-// 0.9% for Grid Copy
-// 52.5% for Is Subset
-// 0.2% for Multiple Letters Ok
+console.log(end - start, "ms");
